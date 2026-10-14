@@ -66,6 +66,7 @@ namespace IsoRim
         public int roofStyle = 0;        // slate, terracotta, thatch, tin
         public bool sunMoves = true;
         public bool cutFrontOnly = false;        // only walls between the camera and the pointer are lowered
+        public bool smoothCut = true;            // RimWorld 1.7: the see-through round the pointer is done by the graphics card
         public bool cutNearColonists = false;    // walls round colonists are lowered too
         public float colonistRadius = 2.5f;
         public bool treesNearPointer = true;     // trees near the pointer drop their leaves so what is under them shows
@@ -133,6 +134,7 @@ namespace IsoRim
             Scribe_Values.Look(ref roofStyle, "roofStyle", 0);
             Scribe_Values.Look(ref sunMoves, "sunMoves", true);
             Scribe_Values.Look(ref cutFrontOnly, "cutFrontOnly", false);
+            Scribe_Values.Look(ref smoothCut, "smoothCut", true);
             Scribe_Values.Look(ref cutNearColonists, "cutNearColonists", false);
             Scribe_Values.Look(ref colonistRadius, "colonistRadius", 2.5f);
             Scribe_Values.Look(ref treesNearPointer, "treesNearPointer", true);
@@ -433,6 +435,10 @@ namespace IsoRim
             if (l != null)
             {
                 Section(l, "Walls", "Walls are lowered so you can see and click what is behind them. Natural rock never is.");
+                if (R3DShaders.OwnShaders)
+                {
+                    Check(l, "Smooth see-through", ref st.smoothCut, "RimWorld 1.7: walls near the pointer sink and trees there thin out on the graphics card, every frame, so it follows the pointer smoothly. Untick to have them redrawn instead, as on RimWorld 1.5 and 1.6.");
+                }
                 Check(l, "Lower walls near the pointer", ref st.cutHover);
                 if (st.cutHover)
                 {
@@ -690,6 +696,11 @@ namespace IsoRim
                 bool ready = R3DMaterials.Solid != null && R3DShaders.OwnShaders;
                 ModLog.Debug("[IsoRim] Build for RimWorld 1.7 (Waylith engine). The mod's own shaders are "
                     + (ready ? "ready." : "NOT ready: see the errors above."));
+                if (ready)
+                {
+                    ModLog.Debug("[IsoRim] Smooth see-through: " + (Cutaway.Smooth ? "on." : (IsoRimMod.Settings.smoothCut
+                        ? "its shaders could not be made, so walls and trees near the pointer are redrawn." : "switched off.")));
+                }
             }
             catch (Exception e)
             {

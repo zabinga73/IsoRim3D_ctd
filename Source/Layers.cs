@@ -1120,6 +1120,7 @@ namespace IsoRim
                     Map map = b.Map;
                     IntVec3 c = b.Position;
                     float h = WallBoxes.HeightFor(b, form.height);
+                    CutKind cut = WallBoxes.SinkKind(b);   // marks on a wall that sinks go down with it
                     for (int k = 0; k < marks; k++)
                     {
                         int face = (int)(Hashing.Unit(id, k, 61) * 5f);   // 0 the cap, 1 to 4 the sides
@@ -1128,7 +1129,7 @@ namespace IsoRim
                         float size = 0.13f + 0.08f * Hashing.Unit(id, k, 73);
                         if (face == 0)
                         {
-                            Mark(this, new Vector3(c.x + u, h + 0.006f, c.z + v), Vector3.up, size, id * 31 + k);
+                            Mark(this, new Vector3(c.x + u, h + 0.006f, c.z + v), Vector3.up, size, id * 31 + k, cut);
                             continue;
                         }
                         IntVec3 dir = GenAdj.CardinalDirections[face - 1];
@@ -1140,7 +1141,7 @@ namespace IsoRim
                         Vector3 along = new Vector3(n.z, 0f, n.x);
                         Vector3 mid = new Vector3(c.x + 0.5f, 0f, c.z + 0.5f) + n * 0.506f + along * (u - 0.5f);
                         mid.y = h * v;
-                        Mark(this, mid, n, size, id * 31 + k);
+                        Mark(this, mid, n, size, id * 31 + k, cut);
                     }
                     break;
                 }
@@ -1163,9 +1164,11 @@ namespace IsoRim
         // One square mark centred on at (x and z in cells, y the height in cells), lying on the
         // surface with the given outward normal, size cells across. seed picks which mark and
         // how it is turned. Returns false if there is no room in the mesh.
-        public static bool Mark(SectionLayer layer, Vector3 at, Vector3 normal, float size, int seed)
+        // cut: what the mark does near the pointer while the graphics card does the see-through;
+        // the same as what it is on.
+        public static bool Mark(SectionLayer layer, Vector3 at, Vector3 normal, float size, int seed, CutKind cut = CutKind.None)
         {
-            Material mat = Mat;
+            Material mat = cut != CutKind.None && Mat != null ? R3DTextures.MaterialFor(TexturePath, new Color(0.9f, 0.9f, 0.9f, 1f), cut) : Mat;
             LayerSubMesh sm = mat != null ? MeshWriter.Sub(layer, mat) : null;
             if (sm == null || sm.verts.Count + 4 > MeshWriter.MaxVerts)
             {

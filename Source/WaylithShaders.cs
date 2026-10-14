@@ -19,9 +19,15 @@ namespace IsoRim
     {
         private const string ColouredProgram = "IsoRimColoured";
         private const string TexturedProgram = "IsoRimTextured";
+        // The same two with the see-through round the pointer worked out in the shader, for a
+        // DrawState with cut set (see Cutaway.Smooth).
+        private const string ColouredCutProgram = "IsoRimColouredCut";
+        private const string TexturedCutProgram = "IsoRimTexturedCut";
 
         private static bool tried;
         private static bool ready;
+        private static bool cutTried;
+        private static bool cutReady;
         private static readonly Dictionary<string, UnityEngine.Shader> made = new Dictionary<string, UnityEngine.Shader>();
 
         // Whether the mod's shader files were found and handed to the engine.
@@ -38,14 +44,34 @@ namespace IsoRim
             }
         }
 
+        // Whether the shaders that do the see-through themselves can be made; tried once.
+        public static bool CutReady
+        {
+            get
+            {
+                if (!cutTried && Ready)
+                {
+                    cutTried = true;
+                    DrawState probe = DrawState.Solid(2000);
+                    probe.cut = true;
+                    cutReady = Coloured(probe) != null && Textured(probe) != null;
+                    if (!cutReady)
+                    {
+                        Log.Warning("[IsoRim] The smooth see-through shaders could not be made; walls and trees near the pointer are redrawn instead.");
+                    }
+                }
+                return cutReady;
+            }
+        }
+
         public static UnityEngine.Shader Coloured(DrawState state)
         {
-            return Get(ColouredProgram, state, false);
+            return Get(state.cut ? ColouredCutProgram : ColouredProgram, state, false);
         }
 
         public static UnityEngine.Shader Textured(DrawState state)
         {
-            return Get(TexturedProgram, state, true);
+            return Get(state.cut ? TexturedCutProgram : TexturedProgram, state, true);
         }
 
         private static bool Init()

@@ -553,6 +553,26 @@ What the 1.7 build of IsoRim does differently:
   (DrawPropertyBlock, Waylith.Rendering.Material, an extra renderQueue). The 1.7 build has
   stand-ins for those too, so pawn and icon drawing is redirected whichever the game calls.
 - The shaders are set up as the game starts (IsoRimStartup), so problems show in the log at once.
+- Smooth see-through ("Smooth see-through" in the options, on by default; Cutaway.Smooth). On 1.5
+  and 1.6, walls lowered and trees thinned round the pointer are redrawn: the blocks of the map
+  they are in are rebuilt, after the pointer has settled for a moment, so it lags and jumps. On
+  1.7 the shaders do it instead, every frame, with nothing rebuilt:
+    - Shaders/Waylith/IsoRimColouredCut and IsoRimTexturedCut are the two programs again, plus the
+      see-through. A material made for them says what it does near the pointer (CutKind): Sink
+      squeezes it toward the ground in the vertex shader, by an amount that eases off smoothly
+      with the distance, so pieces that meet always move together; Dissolve thins it out in the
+      fragment shader with an ordered pattern. What the values mean is at the top of
+      IsoRimColouredCut.vert.
+    - Every such material is kept by R3DShaders (KeepCut), and Cutaway.UpdateSmooth hands them
+      the pointer's place each frame (SetCut), easing in and out as the pointer comes onto the
+      map or goes off it.
+    - What sinks: walls and rock that can be cut (WallBoxes.SinkKind, unless drawn cut already in
+      front of a room), the fittings hung on them (FittingKind) and the damage marks on them.
+      What dissolves: the leaves of trees (ModelBaker.Write, the "leaf" materials) and their
+      outline. Doors are drawn each frame and sink by the same amount (Cutaway.SinkAt), and so
+      do the heights used for clicking and for the icons over walls (Forms.HeightOf).
+    - Walls and trees near colonists, walls in front of rooms and lifted roofs are still redrawn.
+    - If the two programs cannot be made (WaylithShaders.CutReady), it falls back to redrawing.
 
 The GLSL rules, as the engine's own shaders and its parser (ShaderMetadataParser) use them:
 - #version 450. The camera: layout(set = 0, binding = 0) uniform VertexUniforms { mat4 ViewProj; }.
@@ -565,7 +585,9 @@ The GLSL rules, as the engine's own shaders and its parser (ShaderMetadataParser
     layout(location = 1) in vec4 inColor; // @vertex Color optional
   (Position, Normal, Tangent, Color, TexCoord0 to TexCoord7, BlendWeight, BlendIndices, each
   required or optional).
-- A material's values are in set 2: a uniform block for numbers, where a comment such as
+- A material's values are in set 2. The engine reads which values there are from the fragment
+  shader; a vertex shader that reads them too (the Cut programs) has to declare the same block,
+  member for member. A uniform block for numbers, where a comment such as
   "// @default vec4(1.0, 1.0, 1.0, 1.0)" gives the default, and samplers for textures. _MainTex
   is at binding 1 and the texture coordinate is passed on at location 1, as in the engine's own
   shaders.
@@ -601,3 +623,9 @@ What has been checked, and what has not:
      ModelBaker.FaceLift).
   6. Exact colour grading needs a Unity shader bundle. Whether Waylith can use one with a grab
      pass is untested; the colour looks work without it.
+  7. The smooth see-through. Its shaders read the material's values in the vertex shader, which
+     the plain ones do not. If walls stop drawing or do not sink, untick "Smooth see-through" to
+     get the redrawn see-through back, and look for "[IsoRim] Smooth see-through:" in the log.
+     Known differences from the redrawn one: a sinking wall's texture is squeezed rather than cut
+     off, a tree that loses its leaves does not show the twigs a bare tree has, and a torch's
+     flame stays where it was (as it does when a wall is redrawn lowered).

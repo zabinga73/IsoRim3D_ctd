@@ -772,6 +772,98 @@ namespace IsoRim
         private static float wantedSince;
         private static int lastScan = -1000;
 
+        // ---- the see-through on the graphics card (RimWorld 1.7) ------------------------------
+        // With the mod's own shaders, walls, rock and fittings near the pointer sink, and leaves
+        // dissolve, in the shaders themselves (R3DShaders.SetCut). That is worked out every frame
+        // wherever the pointer is, and nothing has to be redrawn, so it follows the pointer
+        // smoothly. It eases off over a cell or so at its rim, and fades in and out over a moment
+        // as the pointer comes onto the map or goes off it (onto a window, say).
+
+        private const float SoftEdge = 1.25f;   // cells over which the cut eases off at its rim
+        private const float FadeTime = 0.12f;   // seconds to fade in or out
+        private static float smoothStrength;
+        private static Vector3 smoothCentre;
+        private static float sinkReach;
+        private static float sinkOn;
+        private static bool sinkFrontOnly;
+
+        // Whether the see-through round the pointer is done by the graphics card instead of by
+        // redrawing the map round it: on RimWorld 1.7 with the mod's own shaders, unless switched off.
+        public static bool Smooth
+        {
+            get
+            {
+#if RW17
+                return IsoRimMod.Settings.smoothCut && WaylithShaders.CutReady;
+#else
+                return false;
+#endif
+            }
+        }
+
+        // The walls part of it: only for walls drawn with the mod's own textures (WallBoxes).
+        public static bool SmoothWalls
+        {
+            get { return Smooth && IsoRimMod.Settings.texturedWalls; }
+        }
+
+        // How much of its height something that sinks with the walls keeps at this point on the
+        // ground right now: what the shaders work out (1 when they are not doing the see-through).
+        public static float SinkAt(Vector3 at)
+        {
+            if (sinkOn <= 0f || !SmoothWalls)
+            {
+                return 1f;
+            }
+            float dx = at.x - smoothCentre.x;
+            float dz = at.z - smoothCentre.z;
+            float t = 1f - SmoothStep(sinkReach - SoftEdge, sinkReach, Mathf.Sqrt(dx * dx + dz * dz));
+            if (sinkFrontOnly)
+            {
+                Vector3 f = View3D.GroundForward;
+                t *= 1f - SmoothStep(0.1f, 1.1f, dx * f.x + dz * f.z);
+            }
+            return Mathf.Lerp(1f, WallBoxes.CutFraction, t * sinkOn);
+        }
+
+        // GLSL's smoothstep, which the shaders use (Unity's Mathf.SmoothStep is another thing).
+        private static float SmoothStep(float edge0, float edge1, float x)
+        {
+            float t = Mathf.Clamp01((x - edge0) / Mathf.Max(edge1 - edge0, 1e-4f));
+            return t * t * (3f - 2f * t);
+        }
+
+        private static void UpdateSmooth(Map map)
+        {
+            IsoRimSettings st = IsoRimMod.Settings;
+            bool pointer = map != null && !PointerOnInterface();
+            smoothStrength = Mathf.MoveTowards(smoothStrength, pointer ? 1f : 0f, Time.unscaledDeltaTime / FadeTime);
+            if (pointer)
+            {
+                Vector3 mouse = Input.mousePosition;
+                smoothCentre = View3D.ScreenToGround(new Vector2(mouse.x, mouse.y));
+            }
+            Vector3 f = View3D.GroundForward;
+
+            // Half a cell more than the reach: the redrawn see-through counts a wall in when the
+            // middle of its cell is within reach.
+            sinkReach = st.dissolveRadius + 0.5f;
+            sinkOn = st.walls3D && st.cutHover ? smoothStrength : 0f;
+            sinkFrontOnly = st.cutFrontOnly;
+            R3DShaders.SetCut(CutKind.Sink,
+                new Vector4(smoothCentre.x, smoothCentre.z, sinkReach, sinkOn),
+                new Vector4(1f, WallBoxes.CutFraction, SoftEdge, 0f),
+                new Vector4(f.x, f.z, sinkFrontOnly ? 1f : 0f, 0f));
+
+            // Leaves: a little further toward the camera, where they hide the pointer (as AddTrees).
+            Vector3 trees = smoothCentre - f * (st.treeRadius * 0.4f);
+            float treesOn = st.trees3D && st.treesNearPointer ? smoothStrength : 0f;
+            R3DShaders.SetCut(CutKind.Dissolve,
+                new Vector4(trees.x, trees.z, st.treeRadius * 1.2f + 0.5f, treesOn),
+                new Vector4(2f, 0f, SoftEdge, 0f),
+                new Vector4(f.x, f.z, 0f, 0f));
+        }
+
         public static bool Hovered(Map map, IntVec3 c)
         {
             return map == hoverMap && cutWalls.Count > 0 && cutWalls.Contains(c);
@@ -803,6 +895,10 @@ namespace IsoRim
             if (map == null)
             {
                 return;
+            }
+            if (Smooth)
+            {
+                UpdateSmooth(map);
             }
             int frame = Time.frameCount;
             if (frame - lastScan >= 4)
@@ -966,7 +1062,8 @@ namespace IsoRim
 
             if (st.walls3D)
             {
-                if (st.cutHover)
+                // (Left to the shaders when the graphics card does the see-through: see UpdateSmooth.)
+                if (st.cutHover && !SmoothWalls)
                 {
                     AddWalls(map, pointerFoci, st.dissolveRadius, st.cutFrontOnly);
                 }
@@ -977,7 +1074,7 @@ namespace IsoRim
             }
             if (st.trees3D)
             {
-                if (st.treesNearPointer)
+                if (st.treesNearPointer && !Smooth)
                 {
                     AddTrees(map, pointerFoci, st.treeRadius);
                 }
@@ -1386,11 +1483,16 @@ namespace IsoRim
                 return true;
             }
 
-            // A door in a wall that is cut down is cut down with it.
+            // A door in a wall that is cut down is cut down with it, and sinks with the walls round
+            // it when the graphics card does the see-through.
             float height = View3D.WallHeight;
             if (WallBoxes.CellCut(map, c))
             {
                 height *= WallBoxes.CutFraction;
+            }
+            else
+            {
+                height *= Cutaway.SinkAt(centre);
             }
             Matrix4x4 sized = Matrix4x4.Scale(new Vector3(1f, height / BuiltForWallHeight, 1f));
             Color tint = door.DrawColor;

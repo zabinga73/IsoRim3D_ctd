@@ -879,7 +879,8 @@ namespace IsoRim
         }
 
         // A material showing this texture multiplied by a colour, or null if the texture is missing.
-        public static Material MaterialFor(string path, Color color)
+        // kind: what it does near the pointer while the graphics card does the see-through.
+        public static Material MaterialFor(string path, Color color, CutKind kind = CutKind.None)
         {
             Texture2D tex = Get(path);
             if (tex == null)
@@ -887,7 +888,7 @@ namespace IsoRim
                 return null;
             }
             color.a = 1f;
-            return R3DShaders.TexturedShared(path, tex, color);
+            return R3DShaders.TexturedShared(path, tex, color, kind);
         }
 
         public static int SwatchIndex(string swatch)
@@ -1153,7 +1154,7 @@ namespace IsoRim
         // brightens and darkens smoothly without anything being rebuilt.
         public const int Bins = 26;
         private static readonly Vector3[] binNormal = MakeBinNormals();
-        private static readonly Material[,] litSolid = new Material[2, Bins];
+        private static readonly Material[,,] litSolid = new Material[3, 2, Bins];   // by CutKind, curve and group
         private static readonly float[,] binShade = new float[2, Bins];
 
         private class LitEntry
@@ -1217,34 +1218,45 @@ namespace IsoRim
             return binShade[curve == 1 ? 1 : 0, Mathf.Clamp(bin, 0, Bins - 1)];
         }
 
-        // The plain solid material for a direction group: vertex colours times the sun.
-        public static Material Lit(int bin, int curve = 0)
+        // The plain solid material for a direction group: vertex colours times the sun. kind: what
+        // it does near the pointer while the graphics card does the see-through (see SolidFor).
+        public static Material Lit(int bin, int curve = 0, CutKind kind = CutKind.None)
         {
-            if (Solid == null)
+            Material basis = SolidFor(kind);
+            if (basis == null)
             {
                 return null;
             }
+            if (basis == solid)
+            {
+                kind = CutKind.None;
+            }
             bin = Mathf.Clamp(bin, 0, Bins - 1);
             curve = curve == 1 ? 1 : 0;
-            Material m = litSolid[curve, bin];
+            Material m = litSolid[(int)kind, curve, bin];
             if (m == null)
             {
-                m = new Material(solid);
-                m.name = "IsoRim_Lit_" + curve + "_" + bin;
+                m = new Material(basis);
+                m.name = "IsoRim_Lit_" + curve + "_" + bin + (kind != CutKind.None ? "_" + kind : "");
                 m.color = Grey(BinShade(bin, curve));
-                litSolid[curve, bin] = m;
+                R3DShaders.KeepCut(m, kind);
+                litSolid[(int)kind, curve, bin] = m;
             }
             return m;
         }
 
         // A texture times a colour, lit for a direction group. Shared by every face with the
         // same texture, colour and direction. Null if the texture is missing.
-        public static Material LitTexture(string path, Color baseColor, int bin, int curve = 0)
+        public static Material LitTexture(string path, Color baseColor, int bin, int curve = 0, CutKind kind = CutKind.None)
         {
             bin = Mathf.Clamp(bin, 0, Bins - 1);
             curve = curve == 1 ? 1 : 0;
+            if (!Cutaway.Smooth)
+            {
+                kind = CutKind.None;
+            }
             Color32 c = baseColor;
-            string key = path + "|" + c.r + "," + c.g + "," + c.b + "|" + bin + "|" + curve;
+            string key = path + "|" + c.r + "," + c.g + "," + c.b + "|" + bin + "|" + curve + "|" + (int)kind;
             Material m;
             if (litByKey.TryGetValue(key, out m))
             {
@@ -1253,7 +1265,7 @@ namespace IsoRim
             Texture2D tex = R3DTextures.Get(path);
             if (tex != null)
             {
-                m = R3DShaders.Textured("IsoRim_LitTex_" + bin, tex, Color.white);
+                m = R3DShaders.Textured("IsoRim_LitTex_" + bin, tex, Color.white, 0, kind);
                 baseColor.a = 1f;
                 LitEntry e = new LitEntry { mat = m, baseColor = baseColor, bin = bin, curve = curve };
                 litEntries.Add(e);
@@ -1282,13 +1294,16 @@ namespace IsoRim
                 binShade[0, b] = ModelShade(n, LightDir);
                 binShade[1, b] = b == 0 ? 1f : WallShadeFor(n, LightFlat);
             }
-            for (int curve = 0; curve < 2; curve++)
+            for (int kind = 0; kind < 3; kind++)
             {
-                for (int b = 0; b < Bins; b++)
+                for (int curve = 0; curve < 2; curve++)
                 {
-                    if (litSolid[curve, b] != null)
+                    for (int b = 0; b < Bins; b++)
                     {
-                        litSolid[curve, b].color = Grey(binShade[curve, b]);
+                        if (litSolid[kind, curve, b] != null)
+                        {
+                            litSolid[kind, curve, b].color = Grey(binShade[curve, b]);
+                        }
                     }
                 }
             }
@@ -1362,6 +1377,57 @@ namespace IsoRim
             }
         }
 
+        private static readonly Material[] cutSolid = new Material[3];
+        private static readonly Material[] cutOutline = new Material[3];
+        private static readonly bool[] cutMade = new bool[3];
+
+        // Solid, or while the graphics card does the see-through round the pointer
+        // (Cutaway.Smooth), the same for something that sinks with the walls or dissolves like
+        // leaves there. Solid itself when there is no such thing.
+        public static Material SolidFor(CutKind kind)
+        {
+            if (kind == CutKind.None || Solid == null || !Cutaway.Smooth)
+            {
+                return Solid;
+            }
+            MakeCut(kind);
+            return cutSolid[(int)kind] ?? solid;
+        }
+
+        // The same for Outline.
+        public static Material OutlineFor(CutKind kind)
+        {
+            if (kind == CutKind.None || Solid == null || !Cutaway.Smooth)
+            {
+                return Outline;
+            }
+            MakeCut(kind);
+            return cutOutline[(int)kind] ?? outline;
+        }
+
+        private static void MakeCut(CutKind kind)
+        {
+            int k = (int)kind;
+            if (cutMade[k])
+            {
+                return;
+            }
+            cutMade[k] = true;
+            cutSolid[k] = R3DShaders.Coloured("IsoRim_Solid_" + kind, DrawState.Solid(2000), true, kind);
+            cutOutline[k] = R3DShaders.Coloured("IsoRim_Outline_" + kind, ShellState(), true, kind);
+        }
+
+        // The inside-out shell drawn round models as their outline.
+        private static DrawState ShellState()
+        {
+            DrawState shell = DrawState.Solid(2000);
+            shell.cull = Cull.Front;
+            // Pushed back a touch in depth, so that where the outline shell runs close to the
+            // model's own faces it can never show through them.
+            shell.pushBack = true;
+            return shell;
+        }
+
         private static void Init()
         {
             tried = true;
@@ -1371,13 +1437,7 @@ namespace IsoRim
             {
                 return;
             }
-
-            DrawState shell = DrawState.Solid(2000);
-            shell.cull = Cull.Front;
-            // Pushed back a touch in depth, so that where the outline shell runs close to the
-            // model's own faces it can never show through them.
-            shell.pushBack = true;
-            outline = R3DShaders.Coloured("IsoRim_Outline", shell);
+            outline = R3DShaders.Coloured("IsoRim_Outline", ShellState());
         }
 
         // See-through, coloured from the vertices, for the ghosts of things still to be built.

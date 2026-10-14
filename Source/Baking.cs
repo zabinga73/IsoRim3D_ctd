@@ -185,6 +185,10 @@ namespace IsoRim
             if (f.form == Form3D.Block)
             {
                 h = WallBoxes.HeightFor(t, f.height);
+                if (WallBoxes.SinkKind(t) == CutKind.Sink)
+                {
+                    h *= Cutaway.SinkAt(t.TrueCenter());   // as far as the shaders have sunk it round the pointer
+                }
             }
             if (t.def.category == ThingCategory.Item)
             {
@@ -446,9 +450,9 @@ namespace IsoRim
 
         // The piece of mesh for plain wall faces looking out of side f, lit by the sun as it
         // moves (see R3DMaterials.Lit); the given piece if there is no room.
-        private static LayerSubMesh LitSide(SectionLayer layer, int f, LayerSubMesh fallback)
+        private static LayerSubMesh LitSide(SectionLayer layer, int f, LayerSubMesh fallback, CutKind cut = CutKind.None)
         {
-            Material m = R3DMaterials.Lit(R3DMaterials.BinOf(FaceOut[f].ToVector3()), 1);
+            Material m = R3DMaterials.Lit(R3DMaterials.BinOf(FaceOut[f].ToVector3()), 1, cut);
             LayerSubMesh sm = m != null ? MeshWriter.Sub(layer, m) : null;
             return sm != null && sm.verts.Count + 8 <= MeshWriter.MaxVerts ? sm : fallback;
         }
@@ -509,28 +513,61 @@ namespace IsoRim
         // not depend on how the game's shader treats vertex colours.
         // Sides are lit by the sun through LitTexture, so they brighten and darken smoothly as it
         // moves; the cap keeps a steady brightness.
-        private static Material MaterialFor(WallKind kind, bool top, int face, bool sloped, Color tint)
+        // cut: what the block does near the pointer while the graphics card does the see-through.
+        private static Material MaterialFor(WallKind kind, bool top, int face, bool sloped, Color tint, CutKind cut = CutKind.None)
         {
             if (!top)
             {
                 float lift = sloped ? 1f + SlopeLight * 1.4f : 1f;
                 string sidePath = "IsoRim/Walls/" + KindNames[(int)kind] + "Side";
                 return R3DMaterials.LitTexture(sidePath, new Color(tint.r * lift, tint.g * lift, tint.b * lift, 1f),
-                    R3DMaterials.BinOf(FaceOut[face].ToVector3()), 1);
+                    R3DMaterials.BinOf(FaceOut[face].ToVector3()), 1, cut);
             }
             float shade = TopShade;
             Color32 c = tint;
             int level = Mathf.Clamp(Mathf.RoundToInt(shade * 100f), 0, 255);
-            long key = ((long)(((int)kind * 2 + (top ? 1 : 0)) * 256 + level) << 32) | (uint)((c.r << 16) | (c.g << 8) | c.b);
+            long key = ((long)((((int)kind * 2 + (top ? 1 : 0)) * 256 + level) * 3 + (int)cut) << 32) | (uint)((c.r << 16) | (c.g << 8) | c.b);
             Material m;
             if (materials.TryGetValue(key, out m))
             {
                 return m;
             }
             string path = "IsoRim/Walls/" + KindNames[(int)kind] + (top ? "Top" : "Side");
-            m = R3DTextures.MaterialFor(path, new Color(tint.r * shade, tint.g * shade, tint.b * shade, 1f));
+            m = R3DTextures.MaterialFor(path, new Color(tint.r * shade, tint.g * shade, tint.b * shade, 1f), cut);
             materials[key] = m;
             return m;
+        }
+
+        // What a block does near the pointer while the graphics card does the see-through
+        // (Cutaway.SmoothWalls): a wall that can be cut sinks there, unless it is drawn cut already
+        // because it stands in front of a room.
+        public static CutKind SinkKind(Thing t)
+        {
+            return Cutaway.SmoothWalls && CanBeCut(t.def) && !IsCut(t.Map, t.Position, t) ? CutKind.Sink : CutKind.None;
+        }
+
+        // A fitting hung on a wall (a torch, a lamp) does the same as the wall it hangs on (see
+        // ModelBaker.Mount), so it goes down with it.
+        public static CutKind FittingKind(Thing t)
+        {
+            Map map = t.Map;
+            if (map == null || !Cutaway.SmoothWalls)
+            {
+                return CutKind.None;
+            }
+            IntVec3 c = t.Position;
+            Thing wall = BlockAt(map, c + t.Rotation.FacingCell) ?? BlockAt(map, c);
+            return wall != null ? SinkKind(wall) : CutKind.None;
+        }
+
+        private static Thing BlockAt(Map map, IntVec3 c)
+        {
+            if (!c.InBounds(map))
+            {
+                return null;
+            }
+            Building b = c.GetEdifice(map);
+            return b != null && Forms.For(b.def).form == Form3D.Block ? b : null;
         }
 
         // Draws one block entirely from the mod's own textures. Returns false, having drawn
@@ -543,7 +580,8 @@ namespace IsoRim
                 return PrintRock(layer, t, height, kind);
             }
             Color tint = t.DrawColor;
-            Material topMat = MaterialFor(kind, true, 0, false, tint);
+            CutKind cut = SinkKind(t);
+            Material topMat = MaterialFor(kind, true, 0, false, tint, cut);
             if (topMat == null)
             {
                 return false;
@@ -553,7 +591,7 @@ namespace IsoRim
             {
                 return false;
             }
-            Material solidMat = R3DMaterials.Solid;
+            Material solidMat = R3DMaterials.SolidFor(cut);
             LayerSubMesh solid = solidMat != null ? MeshWriter.Sub(layer, solidMat) : null;
             bool room = solid != null && solid.verts.Count + 140 <= MeshWriter.MaxVerts;
 
@@ -594,7 +632,7 @@ namespace IsoRim
                 Vector3 p0 = centre + outward * 0.5f - right * 0.5f;   // bottom left corner, seen from outside
                 Vector3 p1 = p0 + right;
 
-                Material sideMat = MaterialFor(kind, false, f, false, tint);
+                Material sideMat = MaterialFor(kind, false, f, false, tint, cut);
                 LayerSubMesh side = sideMat != null ? MeshWriter.Sub(layer, sideMat) : null;
                 bool textured = side != null && side.verts.Count + 4 <= MeshWriter.MaxVerts;
                 if (textured)
@@ -615,7 +653,7 @@ namespace IsoRim
                 // A plain face tucked just behind the textured one (or on its own without it).
                 Vector3 b0 = textured ? p0 - outward * Gap : p0;
                 Vector3 b1 = b0 + right;
-                MeshWriter.Quad(LitSide(layer, f, solid), b0, Raised(b0, topY), Raised(b1, topY), b1, R3DMaterials.Shaded(tint, 0.9f));
+                MeshWriter.Quad(LitSide(layer, f, solid, cut), b0, Raised(b0, topY), Raised(b1, topY), b1, R3DMaterials.Shaded(tint, 0.9f));
 
                 // Dark outlines, in the game's art style: a rim on the cap along this edge, a
                 // line along the ground, and a line up each end of a run of wall.
@@ -668,7 +706,8 @@ namespace IsoRim
         private static bool PrintRock(SectionLayer layer, Thing t, float height, WallKind kind)
         {
             Color tint = t.DrawColor;
-            Material topMat = MaterialFor(kind, true, 0, false, tint);
+            CutKind cut = SinkKind(t);
+            Material topMat = MaterialFor(kind, true, 0, false, tint, cut);
             if (topMat == null)
             {
                 return false;
@@ -678,7 +717,7 @@ namespace IsoRim
             {
                 return false;
             }
-            Material solidMat = R3DMaterials.Solid;
+            Material solidMat = R3DMaterials.SolidFor(cut);
             LayerSubMesh solid = solidMat != null ? MeshWriter.Sub(layer, solidMat) : null;
             bool room = solid != null && solid.verts.Count + 120 <= MeshWriter.MaxVerts;
 
@@ -724,7 +763,7 @@ namespace IsoRim
                     Vector3 b = part == 0 ? rockMid[l] : rockTop[l];
                     Vector3 d = part == 0 ? rockGround[r] : rockMid[r];
                     Vector3 e = part == 0 ? rockMid[r] : rockTop[r];
-                    Material sideMat = MaterialFor(kind, false, f, part == 1, tint);
+                    Material sideMat = MaterialFor(kind, false, f, part == 1, tint, cut);
                     LayerSubMesh side = sideMat != null ? MeshWriter.Sub(layer, sideMat) : null;
                     bool textured = side != null && side.verts.Count + 4 <= MeshWriter.MaxVerts;
                     if (textured)
@@ -736,7 +775,7 @@ namespace IsoRim
                     {
                         Vector3 shift = textured ? back : Vector3.zero;
                         float shade = (part == 0 ? 1f : 1f + SlopeLight * 1.4f) * 0.9f;
-                        MeshWriter.Quad(LitSide(layer, f, solid), ToWorld(a + shift, squash), ToWorld(b + shift, squash), ToWorld(e + shift, squash), ToWorld(d + shift, squash),
+                        MeshWriter.Quad(LitSide(layer, f, solid, cut), ToWorld(a + shift, squash), ToWorld(b + shift, squash), ToWorld(e + shift, squash), ToWorld(d + shift, squash),
                             R3DMaterials.Shaded(tint, shade));
                     }
                 }
@@ -1643,7 +1682,18 @@ namespace IsoRim
             }
 
             Vector3 fit = entry.Fit(thing.def) * scale;
-            if (!Write(layer, thing, m, center, turn, lay, layLift, fit, offset, baseHeight, tint, bare, def.outline))
+            // While the graphics card does the see-through: a fitting on a wall sinks with it, and
+            // a tree's leaves dissolve near the pointer (instead of the tree being redrawn bare).
+            CutKind cut = CutKind.None;
+            if (def.wallMounted)
+            {
+                cut = WallBoxes.FittingKind(thing);
+            }
+            else if (!bare && plant != null && plant.def.plant != null && plant.def.plant.IsTree && Cutaway.Smooth)
+            {
+                cut = CutKind.Dissolve;
+            }
+            if (!Write(layer, thing, m, center, turn, lay, layLift, fit, offset, baseHeight, tint, bare, def.outline, cut))
             {
                 return false;
             }
@@ -1754,7 +1804,7 @@ namespace IsoRim
         public static int DamageMarks;
 
         private static bool WriteDamage(SectionLayer layer, Thing thing, Model m, Vector3 center, Quaternion turn, Quaternion lay, Vector3 layLift,
-            Vector3 scale, Vector3 offset, float baseHeight)
+            Vector3 scale, Vector3 offset, float baseHeight, CutKind cut = CutKind.None)
         {
             int tris = m.positions.Length / 3;
             if (tris == 0)
@@ -1797,7 +1847,7 @@ namespace IsoRim
                 Vector3 p = a + (b - a) * r1 + (c - a) * r2 + n * 0.008f;
                 float size = Mathf.Min(0.18f, Mathf.Sqrt(area) * 0.9f) * (0.8f + 0.4f * Hashing.Unit(id, k, 53));
                 Vector3 world = new Vector3(center.x + p.x, baseHeight + Mathf.Max(0f, p.y), center.z + p.z);
-                if (SectionLayer_IsoRimDamage.Mark(layer, world, n, size, id * 31 + k))
+                if (SectionLayer_IsoRimDamage.Mark(layer, world, n, size, id * 31 + k, cut))
                 {
                     placed++;
                 }
@@ -1805,19 +1855,22 @@ namespace IsoRim
             return placed > 0;
         }
 
+        // cut: Sink, the whole model sinks with the walls near the pointer; Dissolve, its leaves
+        // dissolve there. Only while the graphics card does the see-through (Cutaway.Smooth).
         private static bool Write(SectionLayer layer, Thing thing, Model m, Vector3 center, Quaternion turn, Quaternion lay, Vector3 layLift,
-            Vector3 scale, Vector3 offset, float baseHeight, Color tint, bool bare, float outlineBold)
+            Vector3 scale, Vector3 offset, float baseHeight, Color tint, bool bare, float outlineBold, CutKind cut = CutKind.None)
         {
             if (DamageMarks > 0)
             {
                 Vector3 c0 = new Vector3(center.x, 0f, center.z);
-                return WriteDamage(layer, thing, m, c0, turn, lay, layLift, scale, offset, baseHeight);
+                return WriteDamage(layer, thing, m, c0, turn, lay, layLift, scale, offset, baseHeight, cut == CutKind.Sink ? cut : CutKind.None);
             }
             if (Ghost.a > 0f)
             {
                 return WriteGhost(layer, m, center, turn, lay, layLift, scale, offset, baseHeight);
             }
-            Material mat = R3DMaterials.Solid;
+            CutKind whole = cut == CutKind.Sink ? CutKind.Sink : CutKind.None;
+            Material mat = R3DMaterials.SolidFor(whole);
             LayerSubMesh sm = mat != null ? MeshWriter.Sub(layer, mat) : null;
             int n = m.positions.Length;
             if (sm == null || sm.verts.Count + n > MeshWriter.MaxVerts)
@@ -1827,14 +1880,12 @@ namespace IsoRim
             IsoRimSettings st = IsoRimMod.Settings;
 
             LayerSubMesh outline = null;
+            LayerSubMesh leafOutline = null;
             if (st.outlines && m.hull != null && outlineBold > 0f)
             {
-                Material outlineMat = R3DMaterials.Outline;
-                outline = outlineMat != null ? MeshWriter.Sub(layer, outlineMat) : null;
-                if (outline != null && outline.verts.Count + n > MeshWriter.MaxVerts)
-                {
-                    outline = null;
-                }
+                outline = OutlinePiece(layer, R3DMaterials.OutlineFor(whole), n);
+                // The outline of leaves that dissolve has to dissolve with them.
+                leafOutline = cut == CutKind.Dissolve ? OutlinePiece(layer, R3DMaterials.OutlineFor(CutKind.Dissolve), n) : outline;
             }
 
             bool textured = st.texturedModels && m.materials != null && m.uvs != null && m.material != null;
@@ -1859,6 +1910,7 @@ namespace IsoRim
             for (int i = 0; i < bins; i++)
             {
                 plainPool[i] = null;
+                leafPool[i] = null;
             }
 
             float squash = View3D.Squash;
@@ -1881,21 +1933,24 @@ namespace IsoRim
                 Vector3 normal = turn * (lay * m.normals[i]);
                 bool glow = mm != null && mm.glow;
                 int bin = R3DMaterials.BinOf(normal);
+                bool dissolves = cut == CutKind.Dissolve && mm != null && mm.leaf;
+                CutKind faceCut = dissolves ? CutKind.Dissolve : whole;
 
                 // The plain copy: lit by direction, or the unlit material for something that glows.
                 LayerSubMesh pm = sm;
                 if (!glow)
                 {
-                    pm = plainPool[bin];
+                    LayerSubMesh[] pool = dissolves ? leafPool : plainPool;
+                    pm = pool[bin];
                     if (pm == null)
                     {
-                        Material litMat = R3DMaterials.Lit(bin);
+                        Material litMat = R3DMaterials.Lit(bin, 0, faceCut);
                         pm = litMat != null ? MeshWriter.Sub(layer, litMat) : null;
                         if (pm == null || pm.verts.Count + n > MeshWriter.MaxVerts)
                         {
                             pm = sm;
                         }
-                        plainPool[bin] = pm;
+                        pool[bin] = pm;
                     }
                 }
 
@@ -1913,7 +1968,7 @@ namespace IsoRim
                             c *= tint;
                         }
                         string path = mm.texture.Replace("{stuff}", swatch);
-                        Material tmat = glow ? R3DTextures.MaterialFor(path, c) : R3DMaterials.LitTexture(path, c, bin);
+                        Material tmat = glow ? R3DTextures.MaterialFor(path, c, faceCut) : R3DMaterials.LitTexture(path, c, bin, 0, faceCut);
                         texturedMeshes[slot] = tmat != null ? MeshWriter.Sub(layer, tmat) : null;
                     }
                     tm = texturedMeshes[slot];
@@ -1941,13 +1996,14 @@ namespace IsoRim
                     pm.uvs.Add(default);
 
                     // 2. outline
-                    if (outline != null)
+                    LayerSubMesh om = dissolves ? leafOutline : outline;
+                    if (om != null)
                     {
                         Vector3 h = turn * (Vector3.Scale(lay * (m.positions[k] + hull) + layLift, scale) + offset);
-                        outline.tris.Add(outline.verts.Count);
-                        outline.verts.Add(new Vector3(center.x + h.x, baseY + Mathf.Max(0f, h.y) / squash, center.z + h.z));
-                        outline.colors.Add(R3DMaterials.Shaded(c, OutlineShade));
-                        outline.uvs.Add(default);
+                        om.tris.Add(om.verts.Count);
+                        om.verts.Add(new Vector3(center.x + h.x, baseY + Mathf.Max(0f, h.y) / squash, center.z + h.z));
+                        om.colors.Add(R3DMaterials.Shaded(c, OutlineShade));
+                        om.uvs.Add(default);
                     }
 
                     // 3. textured face
@@ -1966,6 +2022,14 @@ namespace IsoRim
         }
 
         private static readonly LayerSubMesh[] plainPool = new LayerSubMesh[R3DMaterials.Bins];
+        private static readonly LayerSubMesh[] leafPool = new LayerSubMesh[R3DMaterials.Bins];   // leaves that dissolve
+
+        // The piece of mesh for a model's outline with this material, or null if there is no room.
+        private static LayerSubMesh OutlinePiece(SectionLayer layer, Material mat, int n)
+        {
+            LayerSubMesh piece = mat != null ? MeshWriter.Sub(layer, mat) : null;
+            return piece != null && piece.verts.Count + n <= MeshWriter.MaxVerts ? piece : null;
+        }
 
         // Textured faces were drawn a little brighter than their plain colour on the lit side.
         private const float TextureLift = 1.08f;

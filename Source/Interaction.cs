@@ -458,6 +458,10 @@ namespace IsoRim
             }
             h = WallBoxes.BlockHeightAt(map, c);
             Building b = c.GetEdifice(map);
+            if (b != null && h > 0f && WallBoxes.SinkKind(b) == CutKind.Sink)
+            {
+                h *= Cutaway.SinkAt(c.ToVector3Shifted());   // as far as the shaders have sunk it round the pointer
+            }
             if (b != null && h <= 0f)
             {
                 h = Forms.HeightOf(b);

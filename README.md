@@ -49,6 +49,10 @@ reference assemblies:
   ignores the material settings, so the 1.7 build brings its own GLSL shaders
   (`Shaders/Waylith`) and registers them with the engine. On 1.5 and 1.6 nothing about the
   drawing changes.
+- **Smoother see-through on 1.7.** Walls lowering and trees thinning near the pointer are worked
+  out by the graphics card every frame instead of by rebuilding the map around the pointer, so
+  they follow it smoothly, with a soft edge. "Smooth see-through" in the mod settings switches
+  back to the old way.
 
 The details, and what to look at first when testing on the 1.7 beta, are in `DEVELOPMENT.txt`
 (section "RIMWORLD 1.7 AND THE WAYLITH ENGINE").
@@ -60,6 +64,7 @@ Turn on the game's development mode, load a map and press `0`. The log should co
 ```
 [IsoRim] Code loaded.
 [IsoRim] Build for RimWorld 1.7 (Waylith engine). The mod's own shaders are ready.
+[IsoRim] Smooth see-through: on.
 [IsoRim] Drawing redirected in N methods.
 ```
 
