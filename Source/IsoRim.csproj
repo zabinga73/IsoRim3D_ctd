@@ -1,7 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net472</TargetFramework>
+    <!-- The game version to build against; build.bat builds 1.7, 1.6 and 1.5 in turn. -->
+    <RimWorldVersion Condition="'$(RimWorldVersion)' == ''">1.7</RimWorldVersion>
+    <!-- 1.5 and 1.6 run on Unity's Mono (.NET Framework 4.7.2). 1.7 runs on Ludeon's own Waylith
+         engine on .NET 10, with UnityEngine kept as a compatibility layer (UnityStubs.dll). -->
+    <TargetFramework Condition="'$(RimWorldVersion)' == '1.7'">net10.0</TargetFramework>
+    <TargetFramework Condition="'$(RimWorldVersion)' != '1.7'">net472</TargetFramework>
     <LangVersion>latest</LangVersion>
     <AssemblyName>IsoRim</AssemblyName>
     <RootNamespace>IsoRim</RootNamespace>
@@ -12,9 +17,11 @@
     <DebugType>none</DebugType>
     <Nullable>disable</Nullable>
     <Optimize>true</Optimize>
-    <!-- The game version to build against; build.bat builds 1.5 and 1.6 in turn. -->
-    <RimWorldVersion Condition="'$(RimWorldVersion)' == ''">1.6</RimWorldVersion>
-    <DefineConstants Condition="'$(RimWorldVersion)' == '1.6'">$(DefineConstants);RW16</DefineConstants>
+    <!-- No IsoRim.deps.json next to the dll: the game loads mod assemblies itself. -->
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <!-- RW16 means "1.6 or later"; RW17 means the Waylith engine. -->
+    <DefineConstants Condition="'$(RimWorldVersion)' != '1.5'">$(DefineConstants);RW16</DefineConstants>
+    <DefineConstants Condition="'$(RimWorldVersion)' == '1.7'">$(DefineConstants);RW17</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,12 +30,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Reference copies of the game's own libraries. Nothing from these is copied into the mod. -->
-    <PackageReference Include="Krafs.Rimworld.Ref" Version="$(RimWorldVersion).*" />
-    <!-- Harmony is supplied in game by the Harmony mod, so it is only referenced here, not shipped. -->
+    <!-- Reference copies of the game's own libraries. Nothing from these is copied into the mod.
+         1.7 is only published as alpha/beta builds so far, so pre-releases are allowed for it. -->
+    <PackageReference Include="Krafs.Rimworld.Ref" Version="$(RimWorldVersion).*" Condition="'$(RimWorldVersion)' != '1.7'" />
+    <PackageReference Include="Krafs.Rimworld.Ref" Version="1.7.*-*" Condition="'$(RimWorldVersion)' == '1.7'" />
+    <!-- Harmony is supplied in game by the Harmony mod, so it is only referenced here, not shipped.
+         The oldest version with what IsoRim needs, so any newer Harmony in game satisfies it. -->
     <PackageReference Include="Lib.Harmony" Version="2.3.3" ExcludeAssets="runtime" />
     <!-- Lets the .NET SDK build for the game's framework without Visual Studio installed. -->
-    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" Condition="'$(TargetFramework)' == 'net472'" />
   </ItemGroup>
 
 </Project>

@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ModMetaData>
-  <name>IsoRim</name>
-  <author>Connor</author>
-  <packageId>connor.isorim</packageId>
+  <name>IsoRim 3D (Continued)</name>
+  <authors>
+    <li>Connor (kndzio)</li>
+    <li>zabinga73</li>
+  </authors>
+  <packageId>zabinga73.isorim3d</packageId>
+  <url>https://github.com/zabinga73/IsoRim3D_ctd</url>
   <supportedVersions>
     <li>1.5</li>
     <li>1.6</li>
+    <li>1.7</li>
   </supportedVersions>
   <modDependencies>
     <li>
@@ -18,7 +23,13 @@
   <loadAfter>
     <li>brrainz.harmony</li>
   </loadAfter>
-  <description>IsoRim turns your colony into a 3D world, seen through an isometric camera that swings smoothly round your base in 45 degree steps.
+  <!-- The original mod: the same patches and defs, so the two cannot run together. -->
+  <incompatibleWith>
+    <li>connor.isorim</li>
+  </incompatibleWith>
+  <description>A continuation of IsoRim by Connor (kndzio), adding support for RimWorld 1.7 and its new Waylith engine (experimental). Do not use it together with the original IsoRim.
+
+IsoRim turns your colony into a 3D world, seen through an isometric camera that swings smoothly round your base in 45 degree steps.
 
 [b]A 3D colony[/b]
 - Walls are solid textured blocks, and natural rock becomes broken cliffs.

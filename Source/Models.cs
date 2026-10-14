@@ -881,12 +881,13 @@ namespace IsoRim
         // A material showing this texture multiplied by a colour, or null if the texture is missing.
         public static Material MaterialFor(string path, Color color)
         {
-            if (Get(path) == null)
+            Texture2D tex = Get(path);
+            if (tex == null)
             {
                 return null;
             }
             color.a = 1f;
-            return MaterialPool.MatFrom(path, ShaderDatabase.Cutout, color);
+            return R3DShaders.TexturedShared(path, tex, color);
         }
 
         public static int SwatchIndex(string swatch)
@@ -1252,9 +1253,7 @@ namespace IsoRim
             Texture2D tex = R3DTextures.Get(path);
             if (tex != null)
             {
-                m = new Material(ShaderDatabase.Cutout);
-                m.name = "IsoRim_LitTex_" + bin;
-                m.mainTexture = tex;
+                m = R3DShaders.Textured("IsoRim_LitTex_" + bin, tex, Color.white);
                 baseColor.a = 1f;
                 LitEntry e = new LitEntry { mat = m, baseColor = baseColor, bin = bin, curve = curve };
                 litEntries.Add(e);
@@ -1367,37 +1366,18 @@ namespace IsoRim
         {
             tried = true;
 
-            // Built into every Unity player; draws plain vertex colours.
-            Shader shader = Shader.Find("Hidden/Internal-Colored");
-            if (shader == null)
+            solid = R3DShaders.Coloured("IsoRim_Solid", DrawState.Solid(2000));
+            if (solid == null)
             {
-                FieldInfo f = AccessTools.Field(typeof(ShaderDatabase), "VertexColor");
-                if (f != null)
-                {
-                    shader = f.GetValue(null) as Shader;
-                }
-            }
-            if (shader == null)
-            {
-                Log.Error("[IsoRim] No vertex-colour shader is available, so walls and models cannot be drawn in 3D.");
                 return;
             }
 
-            solid = new Material(shader);
-            solid.name = "IsoRim_Solid";
-            solid.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
-            solid.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.Zero);
-            solid.SetInt("_ZWrite", 1);
-            solid.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.LessEqual);
-            solid.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
-            solid.renderQueue = 2000;
-
-            outline = new Material(solid);
-            outline.name = "IsoRim_Outline";
-            outline.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Front);
+            DrawState shell = DrawState.Solid(2000);
+            shell.cull = Cull.Front;
             // Pushed back a touch in depth, so that where the outline shell runs close to the
             // model's own faces it can never show through them.
-            outline.SetFloat("_ZBias", 1f);
+            shell.pushBack = true;
+            outline = R3DShaders.Coloured("IsoRim_Outline", shell);
         }
 
         // See-through, coloured from the vertices, for the ghosts of things still to be built.
@@ -1409,13 +1389,11 @@ namespace IsoRim
             {
                 if (ghost == null && Solid != null)
                 {
-                    ghost = new Material(solid);
-                    ghost.name = "IsoRim_Ghost";
-                    ghost.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                    ghost.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                    ghost.SetInt("_ZWrite", 1);
-                    ghost.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Back);
-                    ghost.renderQueue = 3100;
+                    DrawState state = DrawState.Solid(3100);
+                    state.src = Blend.SrcAlpha;
+                    state.dst = Blend.OneMinusSrcAlpha;
+                    state.cull = Cull.Back;
+                    ghost = R3DShaders.Coloured("IsoRim_Ghost", state);
                 }
                 return ghost;
             }
@@ -1431,9 +1409,7 @@ namespace IsoRim
             {
                 if (roof == null && Solid != null)
                 {
-                    roof = new Material(solid);
-                    roof.name = "IsoRim_Roof";
-                    roof.renderQueue = 3600;
+                    roof = R3DShaders.Coloured("IsoRim_Roof", DrawState.Solid(3600));
                 }
                 return roof;
             }
@@ -1449,12 +1425,7 @@ namespace IsoRim
             {
                 if (waterOverlay == null && Solid != null)
                 {
-                    waterOverlay = new Material(solid);
-                    waterOverlay.name = "IsoRim_Water";
-                    waterOverlay.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                    waterOverlay.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                    waterOverlay.SetInt("_ZWrite", 0);
-                    waterOverlay.renderQueue = 3050;
+                    waterOverlay = R3DShaders.Coloured("IsoRim_Water", DrawState.SeeThrough(3050));
                 }
                 return waterOverlay;
             }
@@ -1498,15 +1469,9 @@ namespace IsoRim
                 if (!groundShadowTried)
                 {
                     groundShadowTried = true;
-                    Material basis = Solid;
-                    if (basis != null)
+                    if (Solid != null)
                     {
-                        groundShadow = new Material(basis);
-                        groundShadow.name = "IsoRim_GroundShadow";
-                        groundShadow.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                        groundShadow.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                        groundShadow.SetInt("_ZWrite", 0);
-                        groundShadow.renderQueue = 2420;
+                        groundShadow = R3DShaders.Coloured("IsoRim_GroundShadow", DrawState.SeeThrough(2420));
                     }
                 }
                 return groundShadow;
@@ -1537,17 +1502,11 @@ namespace IsoRim
             }
 
             ModLog.Warn("[IsoRim] The game's shadow material was not found, so tree shadows will not move with the sun.");
-            Material basis = Solid;
-            if (basis == null)
+            if (Solid == null)
             {
                 return;
             }
-            plainShadow = new Material(basis);
-            plainShadow.name = "IsoRim_Shadow";
-            plainShadow.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-            plainShadow.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            plainShadow.SetInt("_ZWrite", 0);
-            plainShadow.renderQueue = 2900;
+            plainShadow = R3DShaders.Coloured("IsoRim_Shadow", DrawState.SeeThrough(2900));
         }
 
         // Brightness for a face pointing along the given direction: 1 on top, 0.5 in full shade.

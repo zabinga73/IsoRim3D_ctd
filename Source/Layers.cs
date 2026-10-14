@@ -725,13 +725,9 @@ namespace IsoRim
             Texture2D tex = R3DTextures.Get("IsoRim/Roofs/" + StyleNames[style]);
             if (tex != null)
             {
-                m = new Material(ShaderDatabase.Cutout);
-                m.name = "IsoRim_Roof_" + StyleNames[style] + level;
-                m.mainTexture = tex;
                 Color c = Styles[style] * 1.25f;
                 c.a = 1f;
-                m.color = c;
-                m.renderQueue = 3601;
+                m = R3DShaders.Textured("IsoRim_Roof_" + StyleNames[style] + level, tex, c, 3601);
                 textureColors[m] = c;
                 textureBins[m] = bin;
             }

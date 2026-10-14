@@ -227,33 +227,35 @@ namespace IsoRim
             tried = true;
             try
             {
-                Shader shader = Shader.Find("Hidden/Internal-Colored");
-                if (shader == null)
+                Blend[,] blends =
                 {
-                    ModLog.Warn("[IsoRim] The colour grade needs a shader this game does not have, so it is off.");
-                    return;
-                }
-                UnityEngine.Rendering.BlendMode[,] blends =
-                {
-                    { UnityEngine.Rendering.BlendMode.DstColor, UnityEngine.Rendering.BlendMode.Zero },          // out = src * dst
-                    { UnityEngine.Rendering.BlendMode.DstColor, UnityEngine.Rendering.BlendMode.DstColor },      // out = dst * (src + dst)
-                    { UnityEngine.Rendering.BlendMode.One, UnityEngine.Rendering.BlendMode.SrcAlpha },           // out = src + dst * alpha
-                    { UnityEngine.Rendering.BlendMode.DstColor, UnityEngine.Rendering.BlendMode.Zero },          // out = src * dst
-                    { UnityEngine.Rendering.BlendMode.OneMinusDstColor, UnityEngine.Rendering.BlendMode.One },   // screen
-                    { UnityEngine.Rendering.BlendMode.DstColor, UnityEngine.Rendering.BlendMode.One },           // out = dst * (1 + src)
+                    { Blend.DstColor, Blend.Zero },          // out = src * dst
+                    { Blend.DstColor, Blend.DstColor },      // out = dst * (src + dst)
+                    { Blend.One, Blend.SrcAlpha },           // out = src + dst * alpha
+                    { Blend.DstColor, Blend.Zero },          // out = src * dst
+                    { Blend.OneMinusDstColor, Blend.One },   // screen
+                    { Blend.DstColor, Blend.One },           // out = dst * (1 + src)
                 };
                 passMats = new Material[Passes];
                 passMeshes = new Mesh[Passes];
                 for (int i = 0; i < Passes; i++)
                 {
-                    Material m = new Material(shader);
-                    m.name = "IsoRim_Look" + i;
-                    m.SetInt("_SrcBlend", (int)blends[i, 0]);
-                    m.SetInt("_DstBlend", (int)blends[i, 1]);
-                    m.SetInt("_ZWrite", 0);
-                    m.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
-                    m.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
-                    m.renderQueue = 4900 + i;   // after everything else in the map view, in this order
+                    DrawState state = new DrawState
+                    {
+                        src = blends[i, 0],
+                        dst = blends[i, 1],
+                        depthWrite = false,
+                        depthTest = false,
+                        cull = Cull.None,
+                        queue = 4900 + i,   // after everything else in the map view, in this order
+                    };
+                    Material m = R3DShaders.Coloured("IsoRim_Look" + i, state, true);
+                    if (m == null)
+                    {
+                        passMats = null;
+                        ModLog.Warn("[IsoRim] The colour grade needs a shader this game does not have, so it is off.");
+                        return;
+                    }
                     passMats[i] = m;
 
                     Mesh mesh = new Mesh();

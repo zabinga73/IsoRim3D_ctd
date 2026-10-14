@@ -682,6 +682,21 @@ namespace IsoRim
         {
             ModLog.Debug("[IsoRim] Code loaded.");
 
+#if RW17
+            try
+            {
+                // RimWorld 1.7 runs on the Waylith engine, where the mod draws with shaders of its
+                // own. They are set up now, so any problem with them is in the log straight away.
+                bool ready = R3DMaterials.Solid != null && R3DShaders.OwnShaders;
+                ModLog.Debug("[IsoRim] Build for RimWorld 1.7 (Waylith engine). The mod's own shaders are "
+                    + (ready ? "ready." : "NOT ready: see the errors above."));
+            }
+            catch (Exception e)
+            {
+                Log.Error("[IsoRim] Could not set up the shaders for RimWorld 1.7: " + e);
+            }
+#endif
+
             try
             {
                 Patches.ApplyAll();

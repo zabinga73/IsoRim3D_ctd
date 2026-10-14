@@ -125,6 +125,83 @@ namespace IsoRim
             }
         }
 
+#if RW17
+        // RimWorld 1.7 runs on the Waylith engine, whose Graphics.DrawMesh has overloads Unity's did
+        // not. Stand-ins for those too, so the game's drawing is redirected whichever one it calls.
+        private static Matrix4x4 Placed(Matrix4x4 matrix)
+        {
+            return active ? Transform(matrix) : matrix;
+        }
+
+        public static void DrawMesh(Mesh mesh, Matrix4x4 matrix, Material material, int layer, Waylith.Rendering.DrawPropertyBlock properties)
+        {
+            if (!skip)
+            {
+                Graphics.DrawMesh(mesh, Placed(matrix), material, layer, properties);
+            }
+        }
+
+        public static void DrawMesh(Mesh mesh, Matrix4x4 matrix, Material material, int layer, Camera camera, int submeshIndex, Waylith.Rendering.DrawPropertyBlock properties)
+        {
+            if (!skip)
+            {
+                Graphics.DrawMesh(mesh, Placed(matrix), material, layer, camera, submeshIndex, properties);
+            }
+        }
+
+        public static void DrawMesh(Mesh mesh, Matrix4x4 matrix, Material material, int layer, Camera camera, int submeshIndex, Waylith.Rendering.DrawPropertyBlock properties,
+            UnityEngine.Rendering.ShadowCastingMode castShadows, bool receiveShadows)
+        {
+            if (!skip)
+            {
+                Graphics.DrawMesh(mesh, Placed(matrix), material, layer, camera, submeshIndex, properties, castShadows, receiveShadows);
+            }
+        }
+
+        public static void DrawMesh(Mesh mesh, Matrix4x4 matrix, Material material, int layer, Camera camera, int submeshIndex, Waylith.Rendering.DrawPropertyBlock properties,
+            UnityEngine.Rendering.ShadowCastingMode castShadows, bool receiveShadows, int renderQueue)
+        {
+            if (!skip)
+            {
+                Graphics.DrawMesh(mesh, Placed(matrix), material, layer, camera, submeshIndex, properties, castShadows, receiveShadows, renderQueue);
+            }
+        }
+
+        public static void DrawMesh(Mesh mesh, Matrix4x4 matrix, Material material, int layer, Camera camera, int submeshIndex, MaterialPropertyBlock properties,
+            UnityEngine.Rendering.ShadowCastingMode castShadows, bool receiveShadows, int renderQueue)
+        {
+            if (!skip)
+            {
+                Graphics.DrawMesh(mesh, Placed(matrix), material, layer, camera, submeshIndex, properties, castShadows, receiveShadows, renderQueue);
+            }
+        }
+
+        public static void DrawMesh(Mesh mesh, Matrix4x4 matrix, Waylith.Rendering.Material material, int layer)
+        {
+            if (!skip)
+            {
+                Graphics.DrawMesh(mesh, Placed(matrix), material, layer);
+            }
+        }
+
+        public static void DrawMesh(Mesh mesh, Matrix4x4 matrix, Waylith.Rendering.Material material, int layer, Camera camera, int submeshIndex)
+        {
+            if (!skip)
+            {
+                Graphics.DrawMesh(mesh, Placed(matrix), material, layer, camera, submeshIndex);
+            }
+        }
+
+        public static void DrawMesh(Mesh mesh, Matrix4x4 matrix, Waylith.Rendering.Material material, int layer, Camera camera, int submeshIndex, Waylith.Rendering.DrawPropertyBlock properties,
+            UnityEngine.Rendering.ShadowCastingMode castShadows, bool receiveShadows)
+        {
+            if (!skip)
+            {
+                Graphics.DrawMesh(mesh, Placed(matrix), material, layer, camera, submeshIndex, properties, castShadows, receiveShadows);
+            }
+        }
+#endif
+
         // The stand-in with the same parameter list as the given Graphics.DrawMesh overload, or null.
         public static MethodInfo ReplacementFor(MethodInfo original)
         {

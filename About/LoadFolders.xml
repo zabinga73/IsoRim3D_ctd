@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Shared content (Defs, Models, Textures, LUTs, Shaders) is at the top; each game version
-     loads its own build of the code from 1.5/Assemblies or 1.6/Assemblies. -->
+     loads its own build of the code from 1.5/Assemblies, 1.6/Assemblies or 1.7/Assemblies.
+     1.7 is the first version on Ludeon's Waylith engine (.NET 10); its build also uses the GLSL
+     shaders in Shaders/Waylith. -->
 <loadFolders>
   <v1.5>
     <li>/</li>
@@ -10,4 +12,8 @@
     <li>/</li>
     <li>1.6</li>
   </v1.6>
+  <v1.7>
+    <li>/</li>
+    <li>1.7</li>
+  </v1.7>
 </loadFolders>
