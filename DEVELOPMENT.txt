@@ -556,7 +556,11 @@ What the 1.7 build of IsoRim does differently:
 
 The GLSL rules, as the engine's own shaders and its parser (ShaderMetadataParser) use them:
 - #version 450. The camera: layout(set = 0, binding = 0) uniform VertexUniforms { mat4 ViewProj; }.
-  Each draw's model matrix: layout(push_constant) uniform Push { mat4 modelMatrix; }.
+  Each draw's model matrix is an input of its own, per instance:
+    layout(location = 2) in mat4 inModelMatrix; // @instance ModelMatrix required
+  Waylith draws meshes in instanced batches and passes the matrix only this way. A push-constant
+  matrix, as in the engine's built-in fallback shader, stays at identity: the map's fixed
+  geometry still comes out right, but everything that moves is drawn at the map's corner.
 - Each vertex input says what it is in a comment on the same line, for example
     layout(location = 1) in vec4 inColor; // @vertex Color optional
   (Position, Normal, Tangent, Color, TexCoord0 to TexCoord7, BlendWeight, BlendIndices, each
@@ -575,16 +579,19 @@ What has been checked, and what has not:
   Assembly-CSharp, UnityStubs, Waylith and 0Harmony. Every by-name hook target is unchanged from
   1.6. The GLSL compiles and links for Vulkan, and the engine's own parsing rules read its inputs,
   uniforms and textures the intended way.
-- Not yet checked, as it needs the 1.7 beta itself: anything at run time. What most likely needs
-  work, roughly in order:
-  1. Harmony. The mod needs a Harmony mod for 1.7 (.NET 10). Without one, nothing loads.
+- Tried in the 1.7 beta: the mod loads with Harmony, and the tilted camera, walls, rock, trees,
+  ground, items raised from their sprites and the see-through cutaways all work. People were
+  invisible in the first try, drawn at the map's corner because the shaders took the model
+  matrix from a push constant; they now take it per instance (see above). Not confirmed yet.
+- Not yet checked, as it needs the 1.7 beta itself. What most likely needs work, roughly in order:
+  1. Things that move, once the per-instance model matrix is in: people, animals, doors, turret
+     guns, wind turbine blades, flames, the placement preview.
   2. The shaders. With development mode on, the log should say "[IsoRim] Build for RimWorld 1.7
      (Waylith engine). The mod's own shaders are ready." and "[IsoRim] Built shader ..." for each
      one. Otherwise an error names the step that failed: the folder not found or not picked up, a
      definition refused, or the GLSL not compiling (the engine's own message comes before it).
-  3. The camera. The tilt overrides the camera's worldToCameraMatrix, projectionMatrix and
-     cullingMatrix (View3D.ApplyCamera). Waylith's Camera stores such overrides, but whether
-     every part of the map drawing uses them is unknown. If the view does not tilt, start there.
+  3. Clicking. Picking things and dragging boxes go through View3D.ScreenToGround, from the
+     mouse position; if clicks land beside what is under the pointer, start there.
   4. Drawing order. Roofs are drawn after the night darkness, overlays last, and so on, by render
      queue. If Waylith draws darkness or overlays as separate passes, some of this may change.
   5. Things to tune in the GLSL or a DrawState if they show: colours too light or too dark (the
@@ -592,8 +599,5 @@ What has been checked, and what has not:
      (ShaderProgramDefinition.flipTextureST), outlines showing through faces (the sign of the
      depth bias), textured faces flickering against their plain copy (TexturedQueue,
      ModelBaker.FaceLift).
-  6. Reading sprites (Baking.cs, Models.cs) goes through RenderTexture and ReadPixels, which the
-     Unity layer has. If it fails, an error is logged once, things without a hand-made model stay
-     flat sprites instead of being raised, and stand-in plants take a plain green.
-  7. Exact colour grading needs a Unity shader bundle. Whether Waylith can use one with a grab
+  6. Exact colour grading needs a Unity shader bundle. Whether Waylith can use one with a grab
      pass is untested; the colour looks work without it.
