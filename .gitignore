@@ -1,0 +1,21 @@
+# Build intermediates (the built IsoRim.dll in <version>/Assemblies is kept on purpose,
+# so the repository can be dropped straight into RimWorld's Mods folder)
+Source/obj/
+Source/bin/
+
+# Python caches from the model and texture generators
+__pycache__/
+*.pyc
+
+# Unity project caches for the optional LUT shader bundle
+ShaderSource/Library/
+ShaderSource/Temp/
+ShaderSource/Logs/
+ShaderSource/UserSettings/
+ShaderSource/ShaderBundles/
+ShaderSource/obj/
+ShaderSource/*.csproj
+ShaderSource/*.sln
+
+# Release folder written by make_release
+IsoRim_Release/
