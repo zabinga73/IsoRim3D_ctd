@@ -1,10 +1,15 @@
-ISORIM
-======
+ISORIM 3D (CONTINUED)
+=====================
 
 RimWorld in 3D, through an isometric camera. Visual only: safe to add to or remove from an
 existing save.
 
-Requires Harmony (load it above IsoRim). Built for RimWorld 1.5.
+A continuation of IsoRim by Connor (kndzio). Built for RimWorld 1.5, 1.6 and 1.7; support for
+1.7, the first version on the new Waylith engine, is experimental. Do not use it together with
+the original IsoRim.
+
+Requires Harmony (load it above IsoRim). On RimWorld 1.7 that has to be a Harmony release made
+for 1.7.
 
 
 CONTROLS

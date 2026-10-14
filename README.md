@@ -1,53 +1,82 @@
-**ISORIM**
-======
-
-**CREATED WITH THE USE OF AI - No credit required to use, just have fun!**
+# IsoRim 3D (Continued)
 
 _RimWorld in 3D, through an isometric camera. Visual only: safe to add to or remove from an
 existing save._
 
-Requires Harmony (load it above IsoRim). Built for RimWorld 1.5.
-All 3d models are in a .7z file due to git's uploading being a pain for large amounts of files.
+A continuation of [IsoRim](https://github.com/kndzio/IsoRim) by Connor (kndzio), which is no
+longer maintained. This fork adds support for **RimWorld 1.7**, the first version on Ludeon's own
+**Waylith** engine, and keeps 1.5 and 1.6 working as before. Like the original, it was made with
+the help of AI; no credit is needed to use it, just have fun.
 
-CONTROLS
---------
-  0          3D view on and off (also the cube button, bottom right of the screen)
-  9          isometric view or straight-on view (north up)
-  Q and E    turn the camera, in 45 or 90 degree steps
-             (while something is picked to build, Q and E turn that instead, as usual)
-  [ and ]    lower or raise the camera
-  House button (bottom right): show roofs. A key for it can be set.
-  Middle mouse button: drag the map.
+| Game version | Engine | Status |
+|---|---|---|
+| 1.5 | Unity | Works as in the original mod |
+| 1.6 | Unity | Works as in the original mod |
+| 1.7 (beta) | Waylith (.NET 10, Vulkan) | **Experimental.** Builds against the 1.7 reference assemblies; not yet tried in the game |
 
-  All keys: Options > Keyboard configuration > IsoRim.
-  All settings: Options > Mod settings > IsoRim.
+## Install
 
+1. Install **Harmony** for your game version and load it above this mod. On 1.7 you need a
+   Harmony release that supports 1.7 (it runs on .NET 10 now, not Unity's Mono).
+2. Put this whole folder in RimWorld's `Mods` folder. The repository is ready to use as it is:
+   the built `IsoRim.dll` for each game version and the 3D models are included.
+3. Enable Harmony, then IsoRim 3D (Continued). Do not enable the original IsoRim at the same time.
 
-SETTINGS
---------
-  View and camera        isometric view, turn step, camera angle, wall height
-  See-through            lower walls, thin out trees and lift roofs near the pointer or
-                         near your colonists
-  Colour and light       colour looks, shadows, a sun that moves through the day
-  Ground, water, roofs   ground and floor textures, stylised water, roof style
-  What is 3D             switch any part of the 3D view off if it clashes with another mod
+## Controls
 
+| Key | Action |
+|---|---|
+| `0` | 3D view on and off (also the cube button, bottom right of the screen) |
+| `9` | Isometric view or straight-on view (north up) |
+| `Q` / `E` | Turn the camera in 45 or 90 degree steps (while something is picked to build, they turn that instead, as usual) |
+| `[` / `]` | Lower or raise the camera |
+| House button | Show roofs (a key can be set for it) |
+| Middle mouse | Drag the map |
 
-EXACT COLOUR GRADING (OPTIONAL)
--------------------------------
-  The colour looks work out of the box. For exact grading with lookup tables (LUTs), a
-  small shader has to be built once in Unity; see DEVELOPMENT.txt. Your own 1024 x 32 LUT
-  strips can then be dropped into the LUTs folder.
+All keys: Options > Keyboard configuration > IsoRim. All settings: Options > Mod settings > IsoRim.
 
+## What changed for RimWorld 1.7
 
-COMPATIBILITY
--------------
-  Other mods that change how pawns are drawn or how the camera works may clash. Buildings,
-  animals and plants from DLC and mods without a model of their own are raised into 3D from
-  their own sprites. Modded wrecks and junk are matched by name.
+RimWorld 1.7 swaps Unity for Waylith: .NET 10 instead of Mono, Vulkan rendering, and shaders
+written in GLSL and compiled by the game itself. Unity's `UnityEngine` classes are kept as a
+compatibility layer, so most mod code still compiles. For this mod, checked against the 1.7
+reference assemblies:
 
+- **The game's own code barely changed.** Every RimWorld method and field the mod hooks into
+  or looks up by name is the same in 1.7 as in 1.6.
+- **Rendering did change.** The 3D models were drawn with a built-in Unity shader whose
+  blending, depth testing and culling were set per material. Waylith fixes those per shader and
+  ignores the material settings, so the 1.7 build brings its own GLSL shaders
+  (`Shaders/Waylith`) and registers them with the engine. On 1.5 and 1.6 nothing about the
+  drawing changes.
 
-PROBLEMS
---------
-  Switch features off one at a time under "What is 3D" to find which one causes it.
-  With the game's development mode on, IsoRim writes what it found and skipped to the log.
+The details, and what to look at first when testing on the 1.7 beta, are in `DEVELOPMENT.txt`
+(section "RIMWORLD 1.7 AND THE WAYLITH ENGINE").
+
+## Testing on the 1.7 beta
+
+Turn on the game's development mode, load a map and press `0`. The log should contain:
+
+```
+[IsoRim] Code loaded.
+[IsoRim] Build for RimWorld 1.7 (Waylith engine). The mod's own shaders are ready.
+[IsoRim] Drawing redirected in N methods.
+```
+
+Errors starting with `[IsoRim]` name what went wrong. `DEVELOPMENT.txt` lists the likely
+problems and where each one is fixed. If something looks wrong, switch features off one at a time
+under "What is 3D" in the mod settings to find which one causes it.
+
+## Building
+
+Install the [.NET 10 SDK](https://dotnet.microsoft.com/download) (or later), then run
+`build.bat` (Windows) or `build.sh` (macOS/Linux). That builds `1.5/Assemblies`,
+`1.6/Assemblies` and `1.7/Assemblies` against reference copies of the game's libraries from
+NuGet, so the game does not need to be installed. `make_release.bat` / `make_release.sh` then
+copy what players need into `../IsoRim_Release` for the Steam Workshop.
+
+## Credits and licence
+
+IsoRim was created by Connor (kndzio) and is released under the MIT licence (see `LICENSE`); this
+continuation keeps that licence. The 3D models are in `Models/` (the original shipped them as
+`Models.7z`), and they are generated by the Python scripts in `tools/`.

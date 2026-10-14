@@ -1,5 +1,8 @@
-ISORIM - developer notes (version 1.0, built for RimWorld 1.5)
-==============================================
+ISORIM 3D (CONTINUED) - developer notes (built for RimWorld 1.5, 1.6 and 1.7)
+==============================================================================
+
+A continuation of IsoRim 1.0 by Connor (kndzio), adding RimWorld 1.7 and its Waylith engine;
+see "RIMWORLD 1.7 AND THE WAYLITH ENGINE" at the end.
 
 How to build the mod, how it works, and how to change or add models. For players, see
 README.txt. To make the folder that goes on the Steam Workshop: run build.bat, then
@@ -8,16 +11,18 @@ make_release.bat; upload ../IsoRim_Release from the game's mod uploader.
 
 1. BUILD IT (once, and again after any code change)
 ----------------------------------------------------
-  a. Install the free ".NET SDK" from https://dotnet.microsoft.com/download
+  a. Install the free ".NET SDK", version 10 or later, from https://dotnet.microsoft.com/download
+     (RimWorld 1.7 runs on .NET 10, so its build needs that SDK; 1.5 and 1.6 build with it too).
   b. Double-click build.bat (Windows) or run build.sh (macOS/Linux).
-  c. Success leaves IsoRim.dll in the Assemblies folder. Without that file the mod does
-     nothing at all, however it is enabled.
+  c. Success leaves IsoRim.dll in 1.5/Assemblies, 1.6/Assemblies and 1.7/Assemblies. Without
+     that file the mod does nothing at all, however it is enabled.
      If it says BUILD FAILED, the window lists the errors.
 
 
 2. INSTALL IT
 -------------
-  a. Subscribe to the "Harmony" mod on the Steam Workshop.
+  a. Subscribe to the "Harmony" mod on the Steam Workshop. RimWorld 1.7 needs a Harmony
+     release made for 1.7, as the game now runs on .NET 10 instead of Unity's Mono.
   b. Put this whole IsoRim folder in RimWorld's Mods folder.
   c. In the game's Mods screen enable Harmony and IsoRim, with Harmony above IsoRim.
 
@@ -352,7 +357,8 @@ make_release.bat; upload ../IsoRim_Release from the game's mod uploader.
 
 7. EXACT COLOUR GRADING (OPTIONAL)
 ----------------------------------
-  The colour looks work without this. For exact grading with lookup tables:
+  The colour looks work without this. For exact grading with lookup tables (RimWorld 1.5 and
+  1.6; on 1.7 a Unity shader bundle with a grab pass like this one is untested, see the end):
   a. Find the Unity version your game uses: the first lines of Player.log say
      "Initialize engine version: 2022.3.xx". Install that version of Unity (free).
   b. Open the ShaderSource folder of this mod as a Unity project.
@@ -412,12 +418,13 @@ make_release.bat; upload ../IsoRim_Release from the game's mod uploader.
 FOLDERS
 -------
   About/       mod description
-  Assemblies/  the built IsoRim.dll goes here
+  1.5/ 1.6/ 1.7/  Assemblies/IsoRim.dll, the code built for each game version
   Defs/        key bindings and the per-thing settings
   Models/      the hand-made models
   Textures/    the mod's own wall, ground, model and button textures
   LUTs/        colour lookup tables for exact grading
   Shaders/     put the built shader bundles here (see section 7)
+  Shaders/Waylith/  the mod's GLSL shaders for RimWorld 1.7 (see the end of this file)
   ShaderSource/ a small Unity project that builds the shader bundle
   Source/      the C# code
   tools/       the model, texture and LUT generators, and a model previewer
@@ -494,11 +501,99 @@ FLOATING ICONS
   designation icons (Verse.Designation is added to the redirected types). DrawBatch.DrawMesh gets
   the same transform, for icons the game draws in batches.
 
-RIMWORLD 1.5 AND 1.6
---------------------
-- One source tree, built twice: build.bat runs `dotnet build -p:RimWorldVersion=1.6` and `=1.5`,
-  writing 1.6/Assemblies and 1.5/Assemblies. About/LoadFolders.xml loads the shared top level plus
-  the matching version folder. The symbol RW16 is defined for 1.6 builds, for any code that has
-  to differ (#if RW16). There must be no Assemblies folder at the top level.
+RIMWORLD 1.5, 1.6 AND 1.7
+-------------------------
+- One source tree, built three times: build.bat runs `dotnet build -p:RimWorldVersion=1.7`, `=1.6`
+  and `=1.5`, writing 1.7/Assemblies, 1.6/Assemblies and 1.5/Assemblies. 1.5 and 1.6 are built for
+  .NET Framework 4.7.2 (Unity's Mono), 1.7 for .NET 10. About/LoadFolders.xml loads the shared top
+  level plus the matching version folder. The symbol RW16 is defined for 1.6 and later, RW17 for
+  1.7 (Waylith), for any code that has to differ (#if RW17). There must be no Assemblies folder at
+  the top level.
 - Uncertain game APIs are looked up by name with reflection and skipped with a dev-mode warning
   when missing, so a renamed method switches that feature off instead of breaking the mod.
+
+
+RIMWORLD 1.7 AND THE WAYLITH ENGINE
+-----------------------------------
+What 1.7 is, as far as its reference assemblies show (Krafs.Rimworld.Ref 1.7.4977-alpha.1):
+- The game runs on .NET 10 instead of Unity's Mono, on Ludeon's own engine, Waylith: Vulkan
+  rendering, GLFW windows and input, an ImGui-based interface, and shaders written in GLSL (or
+  HLSL) that the game compiles to SPIR-V itself (through Slang) the first time they are used.
+- UnityEngine is kept as a compatibility layer: the UnityEngine.*.dll files only forward to
+  UnityStubs.dll, which implements Unity's classes (Graphics, Mesh, Material, Camera, Texture2D
+  ...) on top of Waylith. Nearly all of IsoRim compiled against it unchanged. Gone:
+  UnityEngine.Rendering.BlendMode and CullMode.
+- The game's own code (Verse, RimWorld) is nearly the same as in 1.6. Every method and field
+  IsoRim patches or looks up by name is in 1.7 with the same signature.
+- New for mods: Verse.ShaderDef (shaders as defs, holding a ShaderProgramDefinition), extra
+  Graphics.DrawMesh overloads, and what look like asset packs (the game baking a mod's Textures
+  and Sounds into an Assets.zip).
+- Csproj takes the newest 1.7 reference package ("1.7.*-*"), so a new beta is picked up by
+  rebuilding. A hook the new beta renamed shows as "[IsoRim] ... was not found" in the log.
+
+What the 1.7 build of IsoRim does differently:
+- Shaders (Source/Shaders.cs, Source/WaylithShaders.cs, Shaders/Waylith). On Unity every 3D
+  material is Hidden/Internal-Colored with _SrcBlend, _DstBlend, _ZWrite, _ZTest, _Cull and _ZBias
+  set on the material. Waylith fixes blending, depth and culling per shader
+  (ShaderProgramDefinition, PipelineState), so on a material they do nothing. All the mod's
+  materials are now made in one place, R3DShaders, from a DrawState (blend factors, depth test
+  and write, culling, depth bias, queue). On 1.5 and 1.6 that makes exactly the Unity materials
+  it made before. On 1.7 it asks WaylithShaders, which
+    1. registers Shaders/Waylith with the engine (ShaderSourceLoader.RegisterShaderSourceDirectory),
+    2. for each DrawState fills in a ShaderProgramDefinition, makes a Waylith.Rendering.Shader of
+       it, registers it (ShaderRegistry.Register) and wraps it as a UnityEngine.Shader
+       (Shader.FromEngineShader),
+    3. on any failure logs an error and leaves that kind of drawing on the game's own shaders.
+  There are two programs. IsoRimColoured is vertex colour times _Color: walls, rock, models,
+  outlines, shadows, overlays and the colour looks. IsoRimTextured is texture times _Color, cut out
+  below half alpha: the textured faces of walls, models and roofs, which use the game's Cutout
+  shader on Unity. The colour looks need their blending exactly, so they switch off rather than
+  use a stand-in.
+- Drawing redirected to DrawHook: Waylith's Graphics.DrawMesh has overloads Unity's did not
+  (DrawPropertyBlock, Waylith.Rendering.Material, an extra renderQueue). The 1.7 build has
+  stand-ins for those too, so pawn and icon drawing is redirected whichever the game calls.
+- The shaders are set up as the game starts (IsoRimStartup), so problems show in the log at once.
+
+The GLSL rules, as the engine's own shaders and its parser (ShaderMetadataParser) use them:
+- #version 450. The camera: layout(set = 0, binding = 0) uniform VertexUniforms { mat4 ViewProj; }.
+  Each draw's model matrix: layout(push_constant) uniform Push { mat4 modelMatrix; }.
+- Each vertex input says what it is in a comment on the same line, for example
+    layout(location = 1) in vec4 inColor; // @vertex Color optional
+  (Position, Normal, Tangent, Color, TexCoord0 to TexCoord7, BlendWeight, BlendIndices, each
+  required or optional).
+- A material's values are in set 2: a uniform block for numbers, where a comment such as
+  "// @default vec4(1.0, 1.0, 1.0, 1.0)" gives the default, and samplers for textures. _MainTex
+  is at binding 1 and the texture coordinate is passed on at location 1, as in the engine's own
+  shaders.
+- Shader files are found by name in every registered folder, so names must not clash with the
+  game's: keep the IsoRim prefix.
+- glslangValidator (Linux package glslang-tools) catches most mistakes without the game:
+    glslangValidator -V -l IsoRimColoured.vert IsoRimColoured.frag
+
+What has been checked, and what has not:
+- Checked: the three builds compile with no warnings. The 1.7 assembly references only
+  Assembly-CSharp, UnityStubs, Waylith and 0Harmony. Every by-name hook target is unchanged from
+  1.6. The GLSL compiles and links for Vulkan, and the engine's own parsing rules read its inputs,
+  uniforms and textures the intended way.
+- Not yet checked, as it needs the 1.7 beta itself: anything at run time. What most likely needs
+  work, roughly in order:
+  1. Harmony. The mod needs a Harmony mod for 1.7 (.NET 10). Without one, nothing loads.
+  2. The shaders. With development mode on, the log should say "[IsoRim] Build for RimWorld 1.7
+     (Waylith engine). The mod's own shaders are ready." and "[IsoRim] Built shader ..." for each
+     one. Otherwise an error names the step that failed: the folder not found or not picked up, a
+     definition refused, or the GLSL not compiling (the engine's own message comes before it).
+  3. The camera. The tilt overrides the camera's worldToCameraMatrix, projectionMatrix and
+     cullingMatrix (View3D.ApplyCamera). Waylith's Camera stores such overrides, but whether
+     every part of the map drawing uses them is unknown. If the view does not tilt, start there.
+  4. Drawing order. Roofs are drawn after the night darkness, overlays last, and so on, by render
+     queue. If Waylith draws darkness or overlays as separate passes, some of this may change.
+  5. Things to tune in the GLSL or a DrawState if they show: colours too light or too dark (the
+     shaders pass colours through unchanged, as Unity did), textures upside down
+     (ShaderProgramDefinition.flipTextureST), outlines showing through faces (the sign of the
+     depth bias), textured faces flickering against their plain copy (TexturedQueue,
+     ModelBaker.FaceLift).
+  6. Reading sprites (Baking.cs, Models.cs) goes through RenderTexture and ReadPixels, which the
+     Unity layer has. If it fails, an error is logged once, things without a hand-made model stay
+     flat sprites instead of being raised, and stand-in plants take a plain green.
+  7. Exact colour grading needs a Unity shader bundle. Whether Waylith can use one with a grab
+     pass is untested; the colour looks work without it.
